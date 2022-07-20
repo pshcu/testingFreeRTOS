@@ -1,1 +1,5 @@
 .settings/
+Debug/
+.project
+.mxproject
+.cproject
