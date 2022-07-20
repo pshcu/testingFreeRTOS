@@ -59,6 +59,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define BUILDINLED_Pin GPIO_PIN_13
 #define BUILDINLED_GPIO_Port GPIOC
+#define POT_Pin_Pin GPIO_PIN_0
+#define POT_Pin_GPIO_Port GPIOA
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
