@@ -125,7 +125,7 @@ int main(void)
   LedBlinkTaskHandle = osThreadCreate(osThread(LedBlinkTask), NULL);
 
   /* definition and creation of ADCTask */
-  osThreadDef(ADCTask, vADCTask, osPriorityLow, 0, 128);
+  osThreadDef(ADCTask, vADCTask, osPriorityNormal, 0, 128);
   ADCTaskHandle = osThreadCreate(osThread(ADCTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -314,12 +314,11 @@ void vADCTask(void const * argument)
     for(;;)
     {
         HAL_ADC_Start(&hadc1);
-        HAL_ADC_PollForConversion(&hadc1, 1);
-
-        ulADCChnl1Data = (uint16_t) HAL_ADC_GetValue(&hadc1);
-
-        xQueueSend(myLedQueHandle, &ulADCChnl1Data, 0);
-
+        if(HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY) == HAL_OK)
+        {
+            ulADCChnl1Data = (uint16_t) HAL_ADC_GetValue(&hadc1);
+            xQueueSend(myLedQueHandle, &ulADCChnl1Data, 0);
+        }
         osDelay(1000);
     }
   /* USER CODE END vADCTask */
