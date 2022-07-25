@@ -121,7 +121,7 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of LedBlinkTask */
-  osThreadDef(LedBlinkTask, vLedBlinkTask, osPriorityLow, 0, 128);
+  osThreadDef(LedBlinkTask, vLedBlinkTask, osPriorityAboveNormal, 0, 128);
   LedBlinkTaskHandle = osThreadCreate(osThread(LedBlinkTask), NULL);
 
   /* definition and creation of ADCTask */
@@ -280,19 +280,27 @@ static void MX_GPIO_Init(void)
 void vLedBlinkTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
-	uint32_t ulLedToggleDelay, ulLedDataFromAdc;
+	uint32_t ulLedToggleDelay, ulDataFromQueue;
+
     (void) argument;
+
+    ulLedToggleDelay = ulDataFromQueue = 0;
     /* Infinite loop */
     for(;;)
     {
       HAL_GPIO_TogglePin(BUILDINLED_GPIO_Port, BUILDINLED_Pin);
-      xQueueReceive(myLedQueHandle, &ulLedDataFromAdc, 0);
-      /* Some math magic */
-      ulLedDataFromAdc = ulLedDataFromAdc >> 2;
-      if(ulLedDataFromAdc >= 1000) ulLedDataFromAdc = 999;
-      ulLedToggleDelay = 1000 - ulLedDataFromAdc;
+      if(xQueueReceive(myLedQueHandle, &ulDataFromQueue, 0) == pdTRUE)
+      {
+          /* Calculate new delay */
+    	  ulDataFromQueue = ulDataFromQueue * 1000 / 4095;
+    	  ulDataFromQueue /= portTICK_PERIOD_MS;
 
-      osDelay(ulLedToggleDelay);
+    	  if(ulDataFromQueue >= BUILDINLED_MAX_DELAY_MS)
+    		  ulDataFromQueue = BUILDINLED_MAX_DELAY_MS - 1;
+
+    	  ulLedToggleDelay = BUILDINLED_MAX_DELAY_MS - ulDataFromQueue;
+      }
+      vTaskDelay(ulLedToggleDelay);
     }
   /* USER CODE END 5 */
 }
@@ -317,9 +325,13 @@ void vADCTask(void const * argument)
         if(HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY) == HAL_OK)
         {
             ulADCChnl1Data = (uint16_t) HAL_ADC_GetValue(&hadc1);
-            xQueueSend(myLedQueHandle, &ulADCChnl1Data, 0);
+            /* Waiting to write to queue cannot be a max delay vLedBlinkTask */
+            if(xQueueSend(myLedQueHandle, &ulADCChnl1Data, BUILDINLED_MAX_DELAY_MS) != pdTRUE)
+            {
+            	Error_Handler();
+            }
         }
-        osDelay(1000);
+        vTaskDelay(POT_DELAY_MS);
     }
   /* USER CODE END vADCTask */
 }

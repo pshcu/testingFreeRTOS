@@ -57,10 +57,14 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+/* Build IN Led */
 #define BUILDINLED_Pin GPIO_PIN_13
 #define BUILDINLED_GPIO_Port GPIOC
+#define BUILDINLED_MAX_DELAY_MS (1000 / portTICK_RATE_MS)
+/* POT */
 #define POT_Pin_Pin GPIO_PIN_0
 #define POT_Pin_GPIO_Port GPIOA
+#define POT_DELAY_MS (100 / portTICK_RATE_MS)
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
