@@ -65,6 +65,7 @@ void Error_Handler(void);
 #define POT_Pin_Pin GPIO_PIN_0
 #define POT_Pin_GPIO_Port GPIOA
 #define POT_DELAY_MS (100 / portTICK_RATE_MS)
+#define ADC_POT_CHANNEL ADC_CHANNEL_0
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

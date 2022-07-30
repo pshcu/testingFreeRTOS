@@ -43,8 +43,10 @@
 ADC_HandleTypeDef hadc1;
 
 osThreadId LedBlinkTaskHandle;
+osThreadId ADCPotTaskHandle;
 osThreadId ADCTaskHandle;
 osMessageQId myLedQueHandle;
+osMutexId ADC1MutexHandle;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -55,6 +57,7 @@ static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 void vLedBlinkTask(void const * argument);
 void vADCTask(void const * argument);
+void vADCPotTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -99,7 +102,9 @@ int main(void)
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
+  osMutexDef(ADC1Mutex);
+  ADC1MutexHandle = osMutexCreate(osMutex(ADC1Mutex));
+
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -121,12 +126,16 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of LedBlinkTask */
-  osThreadDef(LedBlinkTask, vLedBlinkTask, osPriorityAboveNormal, 0, 128);
+  osThreadDef(LedBlinkTask, vLedBlinkTask, osPriorityNormal, 0, 128);
   LedBlinkTaskHandle = osThreadCreate(osThread(LedBlinkTask), NULL);
 
   /* definition and creation of ADCTask */
   osThreadDef(ADCTask, vADCTask, osPriorityNormal, 0, 128);
   ADCTaskHandle = osThreadCreate(osThread(ADCTask), NULL);
+
+  /* definition and creation of ADCTask */
+  osThreadDef(ADCPotTask, vADCPotTask, osPriorityNormal, 0, 128);
+  ADCPotTaskHandle = osThreadCreate(osThread(ADCPotTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -227,13 +236,13 @@ static void MX_ADC1_Init(void)
 
   /** Configure Regular Channel
   */
-  sConfig.Channel = ADC_CHANNEL_0;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+//  sConfig.Channel = ADC_CHANNEL_0;
+//  sConfig.Rank = ADC_REGULAR_RANK_1;
+//  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+//  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
@@ -314,26 +323,69 @@ void vLedBlinkTask(void const * argument)
 /* USER CODE END Header_vADCTask */
 void vADCTask(void const * argument)
 {
-  /* USER CODE BEGIN vADCTask */
+    /* USER CODE BEGIN vADCTask */
 	uint16_t ulADCChnl1Data;
 
 	(void) argument;
+
+	ADC_ChannelConfTypeDef sChnl = {0};
+	sChnl.Channel = ADC_CHANNEL_0;
+	sChnl.Rank = ADC_REGULAR_RANK_1;
+	sChnl.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+
     /* Infinite loop */
     for(;;)
     {
-        HAL_ADC_Start(&hadc1);
-        if(HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY) == HAL_OK)
-        {
-            ulADCChnl1Data = (uint16_t) HAL_ADC_GetValue(&hadc1);
-            /* Waiting to write to queue cannot be a max delay vLedBlinkTask */
-            if(xQueueSend(myLedQueHandle, &ulADCChnl1Data, BUILDINLED_MAX_DELAY_MS) != pdTRUE)
-            {
-            	Error_Handler();
-            }
-        }
-        vTaskDelay(POT_DELAY_MS);
+		osMutexWait(ADC1MutexHandle, portMAX_DELAY);
+		HAL_ADC_ConfigChannel(&hadc1, &sChnl);
+		osDelay(1);
+		HAL_ADC_Start(&hadc1);
+		osDelay(1);
+		ulADCChnl1Data = (uint16_t) HAL_ADC_GetValue(&hadc1);
+		osMutexRelease(ADC1MutexHandle);
+        vTaskDelay(1000);
     }
   /* USER CODE END vADCTask */
+}
+
+/* USER CODE BEGIN Header_vADCPotTask */
+/**
+* @brief Function implementing the ADCPotTask thread.
+* @param argument: ADC Channel Settings
+* @retval None
+*/
+/* USER CODE END Header_vADCPotTask */
+void vADCPotTask(void const * argument)
+{
+    /* USER CODE BEGIN vADCPotTask */
+	uint32_t ulADCData;
+	ADC_ChannelConfTypeDef sChnl = {0};
+
+    (void) argument;
+
+    sChnl.Channel = ADC_CHANNEL_1;
+    sChnl.Rank = ADC_REGULAR_RANK_2;
+    sChnl.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+
+    /* Infinite loop */
+    for(;;)
+    {
+		osMutexWait(ADC1MutexHandle, portMAX_DELAY);
+		HAL_ADC_ConfigChannel(&hadc1, &sChnl);
+		osDelay(1);
+		HAL_ADC_Start(&hadc1);
+		osDelay(1);
+		ulADCData = (uint16_t) HAL_ADC_GetValue(&hadc1);
+
+		/* Waiting to write to queue cannot be a max delay vLedBlinkTask */
+		if(xQueueSend(myLedQueHandle, &ulADCData, BUILDINLED_MAX_DELAY_MS) != pdTRUE)
+		{
+			Error_Handler();
+		}
+		osMutexRelease(ADC1MutexHandle);
+		vTaskDelay(POT_DELAY_MS);
+    }
+  /* USER CODE END vADCPotTask */
 }
 
 /**
