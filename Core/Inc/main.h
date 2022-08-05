@@ -57,17 +57,21 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-/* Build IN Led */
 #define BUILDINLED_Pin GPIO_PIN_13
 #define BUILDINLED_GPIO_Port GPIOC
-#define BUILDINLED_MAX_DELAY_MS (1000 / portTICK_RATE_MS)
-/* POT */
-#define POT_Pin_Pin GPIO_PIN_0
-#define POT_Pin_GPIO_Port GPIOA
-#define POT_DELAY_MS (100 / portTICK_RATE_MS)
-#define ADC_POT_CHANNEL ADC_CHANNEL_0
+#define REDLED_Pin GPIO_PIN_10
+#define REDLED_GPIO_Port GPIOB
+#define GREENLED_Pin GPIO_PIN_11
+#define GREENLED_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
+#define BUILDINLED_TOGGLE_DELAY (200)
+#define BUILDINLED_TOGGLE_DELAY_MS (BUILDINLED_TOGGLE_DELAY / portTICK_PERIOD_MS)
 
+#define REDLED_TOGGLE_DELAY (500)
+#define REDLED_TOGGLE_DELAY_MS (REDLED_TOGGLE_DELAY / portTICK_PERIOD_MS)
+
+#define GREENLED_TASK_DELAY (100)
+//#define GREENLED_TOGGLE_DELAY_MS (GREENLED_TOGGLE_DELAY / portTICK_PERIOD_MS)
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

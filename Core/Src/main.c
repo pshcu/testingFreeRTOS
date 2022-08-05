@@ -40,24 +40,20 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-
-osThreadId LedBlinkTaskHandle;
-osThreadId ADCPotTaskHandle;
-osThreadId ADCTaskHandle;
-osMessageQId myLedQueHandle;
-osMutexId ADC1MutexHandle;
+osThreadId LedRedTaskHandle;
+osThreadId LedGreenTaskHandle;
+osThreadId IdleTaskHandle;
+osSemaphoreId LedGreenBSemaphoreHandle;
 /* USER CODE BEGIN PV */
-
+volatile uint16_t event_delay_counter;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_ADC1_Init(void);
-void vLedBlinkTask(void const * argument);
-void vADCTask(void const * argument);
-void vADCPotTask(void const * argument);
+void vLedRedTask(void const * argument);
+void vLedGreenTask(void const * argument);
+void vIdleTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -96,16 +92,18 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  osMutexDef(ADC1Mutex);
-  ADC1MutexHandle = osMutexCreate(osMutex(ADC1Mutex));
 
   /* USER CODE END RTOS_MUTEX */
+
+  /* Create the semaphores(s) */
+  /* definition and creation of LedGreenBSemaphore */
+  osSemaphoreDef(LedGreenBSemaphore);
+  LedGreenBSemaphoreHandle = osSemaphoreCreate(osSemaphore(LedGreenBSemaphore), 1);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
@@ -115,27 +113,22 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
-  /* Create the queue(s) */
-  /* definition and creation of myLedQue */
-  osMessageQDef(myLedQue, 8, uint16_t);
-  myLedQueHandle = osMessageCreate(osMessageQ(myLedQue), NULL);
-
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* definition and creation of LedBlinkTask */
-  osThreadDef(LedBlinkTask, vLedBlinkTask, osPriorityNormal, 0, 128);
-  LedBlinkTaskHandle = osThreadCreate(osThread(LedBlinkTask), NULL);
+  /* definition and creation of LedRedTask */
+  osThreadDef(LedRedTask, vLedRedTask, osPriorityLow, 0, 128);
+  LedRedTaskHandle = osThreadCreate(osThread(LedRedTask), NULL);
 
-  /* definition and creation of ADCTask */
-  osThreadDef(ADCTask, vADCTask, osPriorityNormal, 0, 128);
-  ADCTaskHandle = osThreadCreate(osThread(ADCTask), NULL);
+  /* definition and creation of LedGreenTask */
+  osThreadDef(LedGreenTask, vLedGreenTask, osPriorityNormal, 0, 128);
+  LedGreenTaskHandle = osThreadCreate(osThread(LedGreenTask), NULL);
 
-  /* definition and creation of ADCTask */
-  osThreadDef(ADCPotTask, vADCPotTask, osPriorityNormal, 0, 128);
-  ADCPotTaskHandle = osThreadCreate(osThread(ADCPotTask), NULL);
+  /* definition and creation of IdleTask */
+  osThreadDef(IdleTask, vIdleTask, osPriorityIdle, 0, 128);
+  IdleTaskHandle = osThreadCreate(osThread(IdleTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -164,7 +157,6 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -194,59 +186,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
-  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-
-/**
-  * @brief ADC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ADC1_Init(void)
-{
-
-  /* USER CODE BEGIN ADC1_Init 0 */
-
-  /* USER CODE END ADC1_Init 0 */
-
-  ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC1_Init 1 */
-
-  /* USER CODE END ADC1_Init 1 */
-
-  /** Common config
-  */
-  hadc1.Instance = ADC1;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
-  hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
-  if (HAL_ADC_Init(&hadc1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure Regular Channel
-  */
-//  sConfig.Channel = ADC_CHANNEL_0;
-//  sConfig.Rank = ADC_REGULAR_RANK_1;
-//  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-//  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-//  {
-//    Error_Handler();
-//  }
-  /* USER CODE BEGIN ADC1_Init 2 */
-
-  /* USER CODE END ADC1_Init 2 */
-
 }
 
 /**
@@ -261,10 +200,14 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(BUILDINLED_GPIO_Port, BUILDINLED_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, REDLED_Pin|GREENLED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : BUILDINLED_Pin */
   GPIO_InitStruct.Pin = BUILDINLED_Pin;
@@ -273,119 +216,87 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(BUILDINLED_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : REDLED_Pin GREENLED_Pin */
+  GPIO_InitStruct.Pin = REDLED_Pin|GREENLED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
 }
 
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_vLedBlinkTask */
+/* USER CODE BEGIN Header_vLedRedTask */
 /**
-  * @brief  Function implementing the LedBlinkTask thread.
+  * @brief  Function implementing the LedRedTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_vLedBlinkTask */
-void vLedBlinkTask(void const * argument)
+/* USER CODE END Header_vLedRedTask */
+void vLedRedTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
-	uint32_t ulLedToggleDelay, ulDataFromQueue;
+  event_delay_counter = 0;
 
-    (void) argument;
+  for(;;)
+  {
+    HAL_GPIO_TogglePin(REDLED_GPIO_Port, REDLED_Pin);
 
-    ulLedToggleDelay = ulDataFromQueue = 0;
-    /* Infinite loop */
-    for(;;)
+    if(++event_delay_counter > GREENLED_TASK_DELAY)
     {
-      HAL_GPIO_TogglePin(BUILDINLED_GPIO_Port, BUILDINLED_Pin);
-      if(xQueueReceive(myLedQueHandle, &ulDataFromQueue, 0) == pdTRUE)
-      {
-          /* Calculate new delay */
-    	  ulDataFromQueue = ulDataFromQueue * 1000 / 4095;
-    	  ulDataFromQueue /= portTICK_PERIOD_MS;
-
-    	  if(ulDataFromQueue >= BUILDINLED_MAX_DELAY_MS)
-    		  ulDataFromQueue = BUILDINLED_MAX_DELAY_MS - 1;
-
-    	  ulLedToggleDelay = BUILDINLED_MAX_DELAY_MS - ulDataFromQueue;
-      }
-      vTaskDelay(ulLedToggleDelay);
+      event_delay_counter = 0;
+      osSemaphoreRelease(LedGreenBSemaphoreHandle);
     }
+    osDelay(REDLED_TOGGLE_DELAY_MS);
+  }
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_vADCTask */
+/* USER CODE BEGIN Header_vLedGreenTask */
 /**
-* @brief Function implementing the ADCTask thread.
+* @brief Function implementing the LedGreenTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_vADCTask */
-void vADCTask(void const * argument)
+/* USER CODE END Header_vLedGreenTask */
+void vLedGreenTask(void const * argument)
 {
-    /* USER CODE BEGIN vADCTask */
-	uint16_t ulADCChnl1Data;
-
-	(void) argument;
-
-	ADC_ChannelConfTypeDef sChnl = {0};
-	sChnl.Channel = ADC_CHANNEL_0;
-	sChnl.Rank = ADC_REGULAR_RANK_1;
-	sChnl.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-
-    /* Infinite loop */
-    for(;;)
+  /* USER CODE BEGIN vLedGreenTask */
+  /* Infinite loop */
+  for(;;)
+  {
+//    xSemaphoreTake()
+    osSemaphoreWait(LedGreenBSemaphoreHandle, portMAX_DELAY);
+    HAL_GPIO_TogglePin(GREENLED_GPIO_Port, GREENLED_Pin);
+    for(int16_t i = 3000; i > 0; i --)
     {
-		osMutexWait(ADC1MutexHandle, portMAX_DELAY);
-		HAL_ADC_ConfigChannel(&hadc1, &sChnl);
-		osDelay(1);
-		HAL_ADC_Start(&hadc1);
-		osDelay(1);
-		ulADCChnl1Data = (uint16_t) HAL_ADC_GetValue(&hadc1);
-		osMutexRelease(ADC1MutexHandle);
-        vTaskDelay(1000);
+    	for(int16_t j = i; j > 0; j--);
     }
-  /* USER CODE END vADCTask */
+//    osDelay(1);
+  }
+  /* USER CODE END vLedGreenTask */
 }
 
-/* USER CODE BEGIN Header_vADCPotTask */
+/* USER CODE BEGIN Header_vIdleTask */
 /**
-* @brief Function implementing the ADCPotTask thread.
-* @param argument: ADC Channel Settings
+* @brief Function implementing the IdleTask thread.
+* @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_vADCPotTask */
-void vADCPotTask(void const * argument)
+/* USER CODE END Header_vIdleTask */
+void vIdleTask(void const * argument)
 {
-    /* USER CODE BEGIN vADCPotTask */
-	uint32_t ulADCData;
-	ADC_ChannelConfTypeDef sChnl = {0};
-
-    (void) argument;
-
-    sChnl.Channel = ADC_CHANNEL_1;
-    sChnl.Rank = ADC_REGULAR_RANK_2;
-    sChnl.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-
-    /* Infinite loop */
-    for(;;)
-    {
-		osMutexWait(ADC1MutexHandle, portMAX_DELAY);
-		HAL_ADC_ConfigChannel(&hadc1, &sChnl);
-		osDelay(1);
-		HAL_ADC_Start(&hadc1);
-		osDelay(1);
-		ulADCData = (uint16_t) HAL_ADC_GetValue(&hadc1);
-
-		/* Waiting to write to queue cannot be a max delay vLedBlinkTask */
-		if(xQueueSend(myLedQueHandle, &ulADCData, BUILDINLED_MAX_DELAY_MS) != pdTRUE)
-		{
-			Error_Handler();
-		}
-		osMutexRelease(ADC1MutexHandle);
-		vTaskDelay(POT_DELAY_MS);
-    }
-  /* USER CODE END vADCPotTask */
+  /* USER CODE BEGIN vIdleTask */
+  /* Infinite loop */
+  for(;;)
+  {
+	HAL_GPIO_TogglePin(BUILDINLED_GPIO_Port, BUILDINLED_Pin);
+    osDelay(BUILDINLED_TOGGLE_DELAY_MS);
+  }
+  /* USER CODE END vIdleTask */
 }
 
 /**
